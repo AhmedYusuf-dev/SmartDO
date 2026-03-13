@@ -5,10 +5,36 @@ import http from 'http';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import Airtable from 'airtable';
 import type { Task, TaskList, User } from './types.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Initialize Airtable
+let base: Airtable.Base | null = null;
+if (process.env.AIRTABLE_API_KEY && process.env.AIRTABLE_BASE_ID) {
+  base = new Airtable({ apiKey: process.env.AIRTABLE_API_KEY }).base(process.env.AIRTABLE_BASE_ID);
+}
+
+async function saveUserToAirtable(user: User) {
+  if (!base) return;
+  try {
+    await base('Users').create([
+      {
+        fields: {
+          'ID': user.id,
+          'Name': user.name,
+          'Email': user.email,
+          'Avatar URL': user.avatarUrl || ''
+        }
+      }
+    ]);
+    console.log(`Saved user ${user.email} to Airtable`);
+  } catch (error) {
+    console.error('Error saving to Airtable:', error);
+  }
+}
 
 async function startServer() {
   const app = express();
@@ -40,24 +66,38 @@ async function startServer() {
   // In-memory user store
   const users: User[] = [];
 
-  app.post('/api/auth/signup', (req, res) => {
-    const { email, password, username } = req.body;
-    if (users.find(u => u.email === email)) {
-      return res.status(400).json({ message: 'User already exists' });
+  app.post('/api/auth/signup', async (req, res) => {
+    try {
+      const { email, password, username } = req.body;
+      if (users.find(u => u.email === email)) {
+        return res.status(400).json({ message: 'User already exists' });
+      }
+      const user = { id: crypto.randomUUID(), email, name: username, avatarUrl: `https://ui-avatars.com/api/?name=${username}` };
+      users.push(user);
+      
+      // Save to Airtable
+      await saveUserToAirtable(user);
+      
+      res.json({ user });
+    } catch (error: any) {
+      console.error('Signup error:', error);
+      res.status(500).json({ message: 'Internal server error during signup' });
     }
-    const user = { id: crypto.randomUUID(), email, name: username, avatarUrl: `https://ui-avatars.com/api/?name=${username}` };
-    users.push(user);
-    res.json({ user });
   });
 
   app.post('/api/auth/login', (req, res) => {
-    const { email, password } = req.body;
-    const user = users.find(u => u.email === email);
-    if (!user) {
-      return res.status(400).json({ message: 'User not found' });
+    try {
+      const { email, password } = req.body;
+      const user = users.find(u => u.email === email);
+      if (!user) {
+        return res.status(400).json({ message: 'User not found' });
+      }
+      // In a real app, verify password here
+      res.json({ user });
+    } catch (error: any) {
+      console.error('Login error:', error);
+      res.status(500).json({ message: 'Internal server error during login' });
     }
-    // In a real app, verify password here
-    res.json({ user });
   });
 
   app.post('/api/user/places', (req, res) => {
@@ -112,6 +152,9 @@ async function startServer() {
         avatarUrl: userData.picture,
         accessToken: tokenData.access_token
       };
+
+      // Save to Airtable
+      await saveUserToAirtable(user);
 
       res.send(`
         <html>
