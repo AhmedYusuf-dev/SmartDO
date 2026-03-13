@@ -1,0 +1,8 @@
+{
+  "name": "SmartDo",
+  "description": "The intelligent task manager that plans your day, organizes errands, and simplifies your life with AI.",
+  "requestFramePermissions": [
+    "camera",
+    "geolocation"
+  ]
+}
