@@ -5,7 +5,7 @@ import http from 'http';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { Task, TaskList, User } from './types.ts';
+import type { Task, TaskList, User } from './types.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -203,7 +203,7 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     app.use(express.static(path.join(__dirname, 'dist')));
-    app.get('*', (req, res) => {
+    app.get('*all', (req, res) => {
       res.sendFile(path.join(__dirname, 'dist', 'index.html'));
     });
   }

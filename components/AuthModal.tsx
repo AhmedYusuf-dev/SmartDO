@@ -43,6 +43,11 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }: AuthModalP
         body: JSON.stringify({ email, password, username: isSignup ? username : undefined })
       });
 
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        throw new Error(`Server error: Expected JSON response, got ${contentType || 'unknown'}`);
+      }
+
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'Authentication failed');
       
