@@ -45,7 +45,9 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }: AuthModalP
 
       const contentType = response.headers.get('content-type');
       if (!contentType || !contentType.includes('application/json')) {
-        throw new Error(`Server error: Expected JSON response, got ${contentType || 'unknown'}`);
+        const text = await response.text();
+        console.error('Non-JSON response from server:', text);
+        throw new Error(`Server error: Expected JSON response, got ${contentType || 'unknown'}. Please try again in a moment.`);
       }
 
       const data = await response.json();
@@ -69,7 +71,9 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }: AuthModalP
       
       const contentType = response.headers.get('content-type');
       if (!contentType || !contentType.includes('application/json')) {
-        throw new Error(`Expected JSON response, got ${contentType}`);
+        const text = await response.text();
+        console.error('Non-JSON response from server:', text);
+        throw new Error(`Expected JSON response, got ${contentType}. Please try again in a moment.`);
       }
       
       const { url } = await response.json();
