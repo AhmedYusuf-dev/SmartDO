@@ -66,6 +66,50 @@ async function startServer() {
   // In-memory user store
   const users: User[] = [];
 
+  app.post('/api/saveUser', async (req, res) => {
+    const { user } = req.body;
+    const apiKey = process.env.VITE_AIRTABLE_API_KEY || process.env.AIRTABLE_API_KEY;
+    const baseId = process.env.VITE_AIRTABLE_BASE_ID || process.env.AIRTABLE_BASE_ID;
+
+    if (!apiKey || !baseId) {
+      return res.status(500).json({ error: 'Airtable credentials not configured' });
+    }
+
+    try {
+      const url = `https://api.airtable.com/v0/${baseId}/Users`;
+      const checkRes = await fetch(`${url}?filterByFormula={Email}='${encodeURIComponent(user.email)}'`, {
+        headers: { Authorization: `Bearer ${apiKey}` }
+      });
+      if (!checkRes.ok) throw new Error('Failed to check Airtable');
+      const checkData = await checkRes.json();
+      if (checkData.records && checkData.records.length > 0) {
+        return res.status(200).json({ message: 'User already exists' });
+      }
+      const createRes = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          records: [{
+            fields: {
+              'ID': user.id,
+              'Name': user.name,
+              'Email': user.email,
+              'Avatar URL': user.avatarUrl || ''
+            }
+          }]
+        })
+      });
+      if (!createRes.ok) throw new Error('Failed to save to Airtable');
+      res.status(200).json({ message: 'Successfully saved user to Airtable' });
+    } catch (err: any) {
+      console.error('Airtable sync error:', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.post('/api/auth/signup', async (req, res) => {
     try {
       const { email, password, username } = req.body;

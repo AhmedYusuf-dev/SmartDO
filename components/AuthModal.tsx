@@ -8,51 +8,21 @@ interface AuthModalProps {
 }
 
 const saveUserToAirtable = async (user: User) => {
-  const apiKey = import.meta.env.VITE_AIRTABLE_API_KEY;
-  const baseId = import.meta.env.VITE_AIRTABLE_BASE_ID;
-  
-  if (!apiKey || !baseId) {
-    console.warn('Airtable credentials not found. Skipping Airtable sync.');
-    return;
-  }
-
   try {
-    const url = `https://api.airtable.com/v0/${baseId}/Users`;
-    
-    // Check if user already exists
-    const checkRes = await fetch(`${url}?filterByFormula={Email}='${encodeURIComponent(user.email)}'`, {
-      headers: { Authorization: `Bearer ${apiKey}` }
-    });
-    
-    if (!checkRes.ok) throw new Error('Failed to check Airtable');
-    const checkData = await checkRes.json();
-    
-    if (checkData.records && checkData.records.length > 0) {
-      console.log('User already exists in Airtable');
-      return; // User exists, no need to create
-    }
-
-    // Create user in Airtable
-    const createRes = await fetch(url, {
+    const res = await fetch('/api/saveUser', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({
-        records: [{
-          fields: {
-            'ID': user.id,
-            'Name': user.name,
-            'Email': user.email,
-            'Avatar URL': user.avatarUrl || ''
-          }
-        }]
-      })
+      body: JSON.stringify({ user })
     });
 
-    if (!createRes.ok) throw new Error('Failed to save to Airtable');
-    console.log('Successfully saved user to Airtable');
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      console.warn('Failed to sync with Airtable via API:', errorData.error || res.statusText);
+    } else {
+      console.log('Successfully synced with Airtable');
+    }
   } catch (err) {
     console.error('Airtable sync error:', err);
   }
