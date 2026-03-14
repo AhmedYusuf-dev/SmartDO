@@ -19,7 +19,7 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }: AuthModalP
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
       const origin = event.origin;
-      if (!origin.endsWith('.run.app') && !origin.includes('localhost')) {
+      if (!origin.endsWith('.run.app') && !origin.includes('localhost') && !origin.endsWith('.vercel.app')) {
         return;
       }
       if (event.data?.type === 'OAUTH_AUTH_SUCCESS' && event.data.user) {
@@ -36,24 +36,31 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }: AuthModalP
     e.preventDefault();
     setError(null);
     try {
-      const endpoint = isSignup ? '/api/auth/signup' : '/api/auth/login';
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, username: isSignup ? username : undefined })
-      });
+      // For Vercel/static deployments, we use localStorage to simulate a backend
+      const usersStr = localStorage.getItem('smartdo_users') || '[]';
+      const users: User[] = JSON.parse(usersStr);
 
-      const contentType = response.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/json')) {
-        const text = await response.text();
-        console.error('Non-JSON response from server:', text);
-        throw new Error(`Server error: Expected JSON response, got ${contentType || 'unknown'}. Please try again in a moment.`);
+      if (isSignup) {
+        if (users.find(u => u.email === email)) {
+          throw new Error('User already exists');
+        }
+        const newUser: User = {
+          id: crypto.randomUUID(),
+          email,
+          name: username,
+          avatarUrl: `https://ui-avatars.com/api/?name=${encodeURIComponent(username)}`
+        };
+        users.push(newUser);
+        localStorage.setItem('smartdo_users', JSON.stringify(users));
+        onAuthSuccess(newUser);
+      } else {
+        const user = users.find(u => u.email === email);
+        if (!user) {
+          throw new Error('User not found. Please sign up first.');
+        }
+        // In a real app, verify password here
+        onAuthSuccess(user);
       }
-
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.message || 'Authentication failed');
-      
-      onAuthSuccess(data.user);
     } catch (err: any) {
       setError(err.message);
     }
@@ -61,24 +68,24 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }: AuthModalP
 
   const handleGoogleLogin = async () => {
     try {
-      const redirectUri = `${window.location.origin}/auth/callback`;
-      // Use a new route to bypass any cached index.html responses
-      const response = await fetch(`/api/auth/google/url?redirect_uri=${encodeURIComponent(redirectUri)}`);
+      const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
       
-      if (!response.ok) {
-        throw new Error(`Failed to get auth URL: ${response.status} ${response.statusText}`);
+      if (!clientId) {
+        throw new Error('VITE_GOOGLE_CLIENT_ID is not set in environment variables.');
       }
+
+      // Use the frontend callback HTML file for Vercel compatibility
+      const redirectUri = `${window.location.origin}/auth/callback.html`;
       
-      const contentType = response.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/json')) {
-        const text = await response.text();
-        console.error('Non-JSON response from server:', text);
-        throw new Error(`Expected JSON response, got ${contentType}. Please try again in a moment.`);
-      }
+      const params = new URLSearchParams({
+        client_id: clientId,
+        redirect_uri: redirectUri,
+        response_type: 'token', // Use implicit flow (token) instead of code for frontend-only auth
+        scope: 'openid email profile https://www.googleapis.com/auth/calendar.readonly',
+        prompt: 'consent'
+      });
       
-      const { url } = await response.json();
-      
-      const finalUrl = `${url}&state=${encodeURIComponent(redirectUri)}`;
+      const finalUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
 
       const authWindow = window.open(
         finalUrl,
