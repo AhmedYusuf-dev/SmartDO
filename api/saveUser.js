@@ -1,4 +1,5 @@
 export default async function handler(req, res) {
+  console.log('Vercel Function: Received request to /api/saveUser', req.body);
   // Add CORS headers for local development if needed, though Vercel handles it via vercel.json usually
   res.setHeader('Access-Control-Allow-Credentials', true);
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -14,6 +15,7 @@ export default async function handler(req, res) {
   }
 
   if (req.method !== 'POST') {
+    console.error('Method not allowed:', req.method);
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
@@ -22,24 +24,33 @@ export default async function handler(req, res) {
   const baseId = process.env.VITE_AIRTABLE_BASE_ID || process.env.AIRTABLE_BASE_ID;
 
   if (!apiKey || !baseId) {
+    console.error('Airtable credentials not configured on Vercel server');
     return res.status(500).json({ error: 'Airtable credentials not configured on server' });
   }
 
   try {
     const url = `https://api.airtable.com/v0/${baseId}/Users`;
+    console.log(`Checking if user exists at ${url}`);
     
     // Check if user already exists
     const checkRes = await fetch(`${url}?filterByFormula={Email}='${encodeURIComponent(user.email)}'`, {
       headers: { Authorization: `Bearer ${apiKey}` }
     });
     
-    if (!checkRes.ok) throw new Error('Failed to check Airtable');
+    if (!checkRes.ok) {
+      const errText = await checkRes.text();
+      console.error('Failed to check Airtable:', checkRes.status, errText);
+      throw new Error(`Failed to check Airtable: ${checkRes.status} ${errText}`);
+    }
+    
     const checkData = await checkRes.json();
     
     if (checkData.records && checkData.records.length > 0) {
+      console.log('User already exists in Airtable');
       return res.status(200).json({ message: 'User already exists' });
     }
 
+    console.log('Creating new user in Airtable');
     // Create user in Airtable
     const createRes = await fetch(url, {
       method: 'POST',
@@ -59,8 +70,13 @@ export default async function handler(req, res) {
       })
     });
 
-    if (!createRes.ok) throw new Error('Failed to save to Airtable');
+    if (!createRes.ok) {
+      const errText = await createRes.text();
+      console.error('Failed to save to Airtable:', createRes.status, errText);
+      throw new Error(`Failed to save to Airtable: ${createRes.status} ${errText}`);
+    }
     
+    console.log('Successfully saved user to Airtable');
     return res.status(200).json({ message: 'Successfully saved user to Airtable' });
   } catch (err) {
     console.error('Airtable sync error:', err);

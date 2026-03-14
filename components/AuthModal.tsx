@@ -126,6 +126,24 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }: AuthModalP
     }
   };
 
+  const testAirtable = async () => {
+    try {
+      const res = await fetch('/api/test-airtable', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tableName: 'Users' })
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert('✅ Airtable connected successfully!');
+      } else {
+        alert(`❌ Airtable Error: ${data.error}\n\nDetails: ${data.details}`);
+      }
+    } catch (err: any) {
+      alert(`❌ Error: ${err.message}`);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-fadeIn">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col relative">
@@ -150,6 +168,9 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }: AuthModalP
             <p className="text-gray-500 text-sm mt-2">
               Sign in to sync your tasks and collaborate in real-time.
             </p>
+            <button onClick={testAirtable} className="mt-4 text-xs text-indigo-600 hover:underline">
+              Test Airtable Connection
+            </button>
           </div>
 
           <div className="space-y-4">
