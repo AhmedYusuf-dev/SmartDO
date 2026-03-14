@@ -7,6 +7,57 @@ interface AuthModalProps {
   onAuthSuccess: (user: User) => void;
 }
 
+const saveUserToAirtable = async (user: User) => {
+  const apiKey = import.meta.env.VITE_AIRTABLE_API_KEY;
+  const baseId = import.meta.env.VITE_AIRTABLE_BASE_ID;
+  
+  if (!apiKey || !baseId) {
+    console.warn('Airtable credentials not found. Skipping Airtable sync.');
+    return;
+  }
+
+  try {
+    const url = `https://api.airtable.com/v0/${baseId}/Users`;
+    
+    // Check if user already exists
+    const checkRes = await fetch(`${url}?filterByFormula={Email}='${encodeURIComponent(user.email)}'`, {
+      headers: { Authorization: `Bearer ${apiKey}` }
+    });
+    
+    if (!checkRes.ok) throw new Error('Failed to check Airtable');
+    const checkData = await checkRes.json();
+    
+    if (checkData.records && checkData.records.length > 0) {
+      console.log('User already exists in Airtable');
+      return; // User exists, no need to create
+    }
+
+    // Create user in Airtable
+    const createRes = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        records: [{
+          fields: {
+            'ID': user.id,
+            'Name': user.name,
+            'Email': user.email,
+            'Avatar URL': user.avatarUrl || ''
+          }
+        }]
+      })
+    });
+
+    if (!createRes.ok) throw new Error('Failed to save to Airtable');
+    console.log('Successfully saved user to Airtable');
+  } catch (err) {
+    console.error('Airtable sync error:', err);
+  }
+};
+
 export default function AuthModal({ isOpen, onClose, onAuthSuccess }: AuthModalProps) {
   const [error, setError] = useState<string | null>(null);
 
@@ -17,12 +68,13 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }: AuthModalP
   const [isSignup, setIsSignup] = useState(false);
 
   useEffect(() => {
-    const handleMessage = (event: MessageEvent) => {
+    const handleMessage = async (event: MessageEvent) => {
       const origin = event.origin;
       if (!origin.endsWith('.run.app') && !origin.includes('localhost') && !origin.endsWith('.vercel.app')) {
         return;
       }
       if (event.data?.type === 'OAUTH_AUTH_SUCCESS' && event.data.user) {
+        await saveUserToAirtable(event.data.user);
         onAuthSuccess(event.data.user);
       }
     };
@@ -52,6 +104,7 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }: AuthModalP
         };
         users.push(newUser);
         localStorage.setItem('smartdo_users', JSON.stringify(users));
+        await saveUserToAirtable(newUser);
         onAuthSuccess(newUser);
       } else {
         const user = users.find(u => u.email === email);
@@ -59,6 +112,7 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }: AuthModalP
           throw new Error('User not found. Please sign up first.');
         }
         // In a real app, verify password here
+        await saveUserToAirtable(user);
         onAuthSuccess(user);
       }
     } catch (err: any) {
